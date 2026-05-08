@@ -54,6 +54,7 @@
 
       const toBridgeQueue = [];
       const toNodeQueue = [];
+      const TRACE = "[BRIDGE_TRACE]";
 
       function withQuery(base, id, sid) {
         const u = new URL(base);
@@ -64,6 +65,15 @@
 
       function setStatus(text) {
         statusEl.textContent = text;
+      }
+
+      function trace(msg, extra) {
+        const ts = new Date().toISOString();
+        if (extra !== undefined) {
+          console.log(`${TRACE} ${ts} ${msg}`, extra);
+          return;
+        }
+        console.log(`${TRACE} ${ts} ${msg}`);
       }
 
       function enqueue(queue, payload) {
@@ -81,6 +91,7 @@
       function connectBoth() {
         closing = false;
         setStatus("connecting");
+        trace("connect_start", { uuid, session, bridgeURL, nodeURL });
 
         bridgeWS = new WebSocket(bridgeURL);
         nodeWS = new WebSocket(nodeURL);
@@ -90,10 +101,12 @@
         bridgeWS.onopen = () => {
           flush(bridgeWS, toBridgeQueue);
           setStatus("bridge-up");
+          trace("bridge_ws_open");
         };
         nodeWS.onopen = () => {
           flush(nodeWS, toNodeQueue);
           setStatus("node-up");
+          trace("node_ws_open");
         };
 
         bridgeWS.onmessage = (ev) => {
@@ -112,11 +125,21 @@
           bridgeWS.send(ev.data);
         };
 
-        bridgeWS.onerror = () => {};
-        nodeWS.onerror = () => {};
+        bridgeWS.onerror = (ev) => {
+          trace("bridge_ws_error", ev);
+        };
+        nodeWS.onerror = (ev) => {
+          trace("node_ws_error", ev);
+        };
 
-        bridgeWS.onclose = scheduleReconnect;
-        nodeWS.onclose = scheduleReconnect;
+        bridgeWS.onclose = (ev) => {
+          trace("bridge_ws_close", { code: ev.code, reason: ev.reason });
+          scheduleReconnect();
+        };
+        nodeWS.onclose = (ev) => {
+          trace("node_ws_close", { code: ev.code, reason: ev.reason });
+          scheduleReconnect();
+        };
       }
 
       function scheduleReconnect() {
@@ -125,6 +148,7 @@
         safeClose(bridgeWS);
         safeClose(nodeWS);
         setStatus("reconnecting");
+        trace("reconnect_scheduled", { delayMs: reconnectDelayMs });
         setTimeout(connectBoth, reconnectDelayMs);
         reconnectDelayMs = Math.min(reconnectDelayMs + 600, 5000);
       }
