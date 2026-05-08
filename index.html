@@ -167,12 +167,12 @@
 
       setInterval(() => {
         if (bridgeWS && bridgeWS.readyState === WebSocket.OPEN) {
-          try { bridgeWS.send(new Uint8Array(0)); } catch (_) {}
+          try { bridgeWS.send("hb"); } catch (_) {}
         }
         if (nodeWS && nodeWS.readyState === WebSocket.OPEN) {
-          try { nodeWS.send(new Uint8Array(0)); } catch (_) {}
+          try { nodeWS.send("hb"); } catch (_) {}
         }
-      }, 25000);
+      }, 5000);
 
       connectBoth();
     })();
