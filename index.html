@@ -31,7 +31,7 @@
       const statusEl = document.getElementById("status");
       // Hardcode both websocket endpoints in the deployed page.
       // Do not pass these from query string.
-      const BRIDGE_WS_BASE = "wss://bridge.example.com/bridge/browser";
+      const BRIDGE_WS_BASE = "wss://relay.bzpartco.com/bridge/browser";
       const NODE_WS_BASE = "wss://second.vpnapk.org/bridge/node";
 
       const params = new URLSearchParams(window.location.search);
@@ -45,14 +45,14 @@
         return;
       }
 
-      const bridgeURL = withQuery(bridge_WS_BASE, uuid, session);
+      const bridgeURL = withQuery(BRIDGE_WS_BASE, uuid, session);
       const nodeURL = withQuery(NODE_WS_BASE, uuid, session);
       let bridgeWS = null;
       let nodeWS = null;
       let closing = false;
       let reconnectDelayMs = 1200;
 
-      const tobridgeQueue = [];
+      const toBridgeQueue = [];
       const toNodeQueue = [];
 
       function withQuery(base, id, sid) {
@@ -88,7 +88,7 @@
         nodeWS.binaryType = "arraybuffer";
 
         bridgeWS.onopen = () => {
-          flush(bridgeWS, tobridgeQueue);
+          flush(bridgeWS, toBridgeQueue);
           setStatus("bridge-up");
         };
         nodeWS.onopen = () => {
@@ -106,7 +106,7 @@
 
         nodeWS.onmessage = (ev) => {
           if (!bridgeWS || bridgeWS.readyState !== WebSocket.OPEN) {
-            enqueue(tobridgeQueue, ev.data);
+            enqueue(toBridgeQueue, ev.data);
             return;
           }
           bridgeWS.send(ev.data);
