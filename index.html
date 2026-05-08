@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>bridge</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      color: #000;
+      overflow: hidden;
+      font-family: monospace;
+    }
+    #status {
+      position: fixed;
+      right: 8px;
+      bottom: 8px;
+      font-size: 10px;
+      color: #111;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="status"></div>
+  <script>
+    (() => {
+      const statusEl = document.getElementById("status");
+      // Hardcode both websocket endpoints in the deployed page.
+      // Do not pass these from query string.
+      const BRIDGE_WS_BASE = "wss://bridge.example.com/bridge/browser";
+      const NODE_WS_BASE = "wss://second.vpnapk.org/bridge/node";
+
+      const params = new URLSearchParams(window.location.search);
+      const uuid = params.get("uuid") || "";
+      const session = params.get("session") || "";
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+      // Keep public/manual hits almost no-op.
+      if (!UUID_RE.test(uuid) || session.length < 12) {
+        document.body.innerHTML = "";
+        return;
+      }
+
+      const bridgeURL = withQuery(bridge_WS_BASE, uuid, session);
+      const nodeURL = withQuery(NODE_WS_BASE, uuid, session);
+      let bridgeWS = null;
+      let nodeWS = null;
+      let closing = false;
+      let reconnectDelayMs = 1200;
+
+      const tobridgeQueue = [];
+      const toNodeQueue = [];
+
+      function withQuery(base, id, sid) {
+        const u = new URL(base);
+        u.searchParams.set("uuid", id);
+        u.searchParams.set("session", sid);
+        return u.toString();
+      }
+
+      function setStatus(text) {
+        statusEl.textContent = text;
+      }
+
+      function enqueue(queue, payload) {
+        queue.push(payload);
+        if (queue.length > 512) queue.shift();
+      }
+
+      function flush(target, queue) {
+        while (target && target.readyState === WebSocket.OPEN && queue.length > 0) {
+          const payload = queue.shift();
+          target.send(payload);
+        }
+      }
+
+      function connectBoth() {
+        closing = false;
+        setStatus("connecting");
+
+        bridgeWS = new WebSocket(bridgeURL);
+        nodeWS = new WebSocket(nodeURL);
+        bridgeWS.binaryType = "arraybuffer";
+        nodeWS.binaryType = "arraybuffer";
+
+        bridgeWS.onopen = () => {
+          flush(bridgeWS, tobridgeQueue);
+          setStatus("bridge-up");
+        };
+        nodeWS.onopen = () => {
+          flush(nodeWS, toNodeQueue);
+          setStatus("node-up");
+        };
+
+        bridgeWS.onmessage = (ev) => {
+          if (!nodeWS || nodeWS.readyState !== WebSocket.OPEN) {
+            enqueue(toNodeQueue, ev.data);
+            return;
+          }
+          nodeWS.send(ev.data);
+        };
+
+        nodeWS.onmessage = (ev) => {
+          if (!bridgeWS || bridgeWS.readyState !== WebSocket.OPEN) {
+            enqueue(tobridgeQueue, ev.data);
+            return;
+          }
+          bridgeWS.send(ev.data);
+        };
+
+        bridgeWS.onerror = () => {};
+        nodeWS.onerror = () => {};
+
+        bridgeWS.onclose = scheduleReconnect;
+        nodeWS.onclose = scheduleReconnect;
+      }
+
+      function scheduleReconnect() {
+        if (closing) return;
+        closing = true;
+        safeClose(bridgeWS);
+        safeClose(nodeWS);
+        setStatus("reconnecting");
+        setTimeout(connectBoth, reconnectDelayMs);
+        reconnectDelayMs = Math.min(reconnectDelayMs + 600, 5000);
+      }
+
+      function safeClose(ws) {
+        try {
+          if (ws) ws.close();
+        } catch (_) {}
+      }
+
+      window.addEventListener("beforeunload", () => {
+        closing = true;
+        safeClose(bridgeWS);
+        safeClose(nodeWS);
+      });
+
+      setInterval(() => {
+        if (bridgeWS && bridgeWS.readyState === WebSocket.OPEN) {
+          try { bridgeWS.send(new Uint8Array(0)); } catch (_) {}
+        }
+        if (nodeWS && nodeWS.readyState === WebSocket.OPEN) {
+          try { nodeWS.send(new Uint8Array(0)); } catch (_) {}
+        }
+      }, 25000);
+
+      connectBoth();
+    })();
+  </script>
+</body>
+</html>
