@@ -70,7 +70,13 @@
       function trace(msg, extra) {
         const ts = new Date().toISOString();
         if (extra !== undefined) {
-          console.log(`${TRACE} ${ts} ${msg}`, extra);
+          let payload = "";
+          try {
+            payload = JSON.stringify(extra);
+          } catch (_) {
+            payload = String(extra);
+          }
+          console.log(`${TRACE} ${ts} ${msg} ${payload}`);
           return;
         }
         console.log(`${TRACE} ${ts} ${msg}`);
