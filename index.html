@@ -32,7 +32,7 @@
       // Hardcode both websocket endpoints in the deployed page.
       // Do not pass these from query string.
       const BRIDGE_WS_BASE = "wss://relay.bzpartco.com/bridge/browser";
-      const NODE_WS_BASE = "wss://second.vpnapk.org/bridge/node";
+      const NODE_WS_BASE = "wss://first.vpnapk.org/bridge/node";
 
       const params = new URLSearchParams(window.location.search);
       const uuid = params.get("uuid") || "";
